@@ -1,0 +1,97 @@
+name: Build App
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: "Unique ID for this build (matches the uploads/ folder)"
+        required: true
+      app_name:
+        description: "Name for the compiled exe"
+        required: true
+      project_type:
+        description: "console or winforms — only used if no .csproj was uploaded"
+        required: false
+        default: "winforms"
+
+permissions:
+  contents: write   # needed to publish the release and clean up the upload folder
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Stage uploaded source
+        shell: pwsh
+        run: |
+          $src = "uploads/${{ inputs.build_id }}"
+          if (!(Test-Path $src)) { throw "No uploaded files found at $src" }
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          Copy-Item "$src/*" -Destination "build" -Recurse -Force
+
+      - name: Generate project file if none was uploaded
+        shell: pwsh
+        run: |
+          $existing = Get-ChildItem build -Filter *.csproj -Recurse
+          if (-not $existing) {
+            $isConsole = "${{ inputs.project_type }}" -eq "console"
+            $tfm = if ($isConsole) { "net8.0" } else { "net8.0-windows" }
+            $useWinForms = if ($isConsole) { "false" } else { "true" }
+            $outputType = if ($isConsole) { "Exe" } else { "WinExe" }
+            $content = @"
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>$outputType</OutputType>
+              <TargetFramework>$tfm</TargetFramework>
+              <UseWindowsForms>$useWinForms</UseWindowsForms>
+              <Nullable>enable</Nullable>
+              <ImplicitUsings>enable</ImplicitUsings>
+              <AssemblyName>${{ inputs.app_name }}</AssemblyName>
+              <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+              <SelfContained>true</SelfContained>
+              <PublishSingleFile>true</PublishSingleFile>
+              <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+              <InvariantGlobalization>true</InvariantGlobalization>
+            </PropertyGroup>
+          </Project>
+          "@
+            $content | Out-File -Encoding utf8 "build/generated.csproj"
+          }
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          cd build
+          dotnet publish -c Release -o out
+
+      - name: Collect exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem build/out -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw "No .exe produced — check the publish step above for errors" }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $exe.FullName "dist/${{ inputs.app_name }}.exe"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ inputs.build_id }}
+          name: "${{ inputs.app_name }} — ${{ inputs.build_id }}"
+          files: dist/${{ inputs.app_name }}.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove uploaded source from repo
+        shell: pwsh
+        run: |
+          git config user.name "appbuilder-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm -r --ignore-unmatch "uploads/${{ inputs.build_id }}"
+          git commit -m "Clean up build ${{ inputs.build_id }}" --allow-empty
+          git push

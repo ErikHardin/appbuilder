@@ -158,7 +158,7 @@
   <label>Source files</label>
   <div class="dropzone" id="dropzone">
     Click to browse, or drag files here<br>(.cs, .csproj, resources — folders supported)
-    <input type="file" id="fileInput" multiple webkitdirectory style="display:none;">
+    <input type="file" id="fileInput" style="display:none;">
   </div>
   <div class="file-list" id="fileList"></div>
 
@@ -174,7 +174,7 @@
 
 <script>
   // Fill these in once your Worker is deployed
-  const WORKER_BASE = "https://appbuilder.YOUR-SUBDOMAIN.workers.dev";
+  const WORKER_BASE = "https://appbuilder.erikchardin.workers.dev";
 
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');

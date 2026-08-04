@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AppBuilder</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #10161f;
+    --border: #1e2733;
+    --text: #d7e0ea;
+    --dim: #6b7688;
+    --pink: #ec008c;
+    --green: #2ecc71;
+    --red: #e0505f;
+    --amber: #f5a623;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .panel {
+    width: 100%;
+    max-width: 560px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px;
+  }
+  h1 {
+    font-size: 15px;
+    letter-spacing: 0.5px;
+    color: var(--pink);
+    margin: 0 0 4px 0;
+    text-transform: uppercase;
+  }
+  .sub {
+    color: var(--dim);
+    font-size: 12px;
+    margin-bottom: 24px;
+  }
+  label {
+    display: block;
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin: 18px 0 6px 0;
+  }
+  input[type="text"], select {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0d1219;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .dropzone {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 24px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  .dropzone.dragover { border-color: var(--pink); color: var(--text); }
+  .dropzone input { display: none; }
+  .file-list {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .file-list div {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-list .remove {
+    color: var(--red);
+    cursor: pointer;
+  }
+  button.create {
+    width: 100%;
+    margin-top: 22px;
+    padding: 13px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    border-radius: 5px;
+    border: 1px solid var(--pink);
+    background: transparent;
+    color: var(--pink);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  }
+  button.create:hover:not(:disabled) { background: var(--pink); color: #0a0e14; }
+  button.create:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status-line {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 18px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex-shrink: 0; }
+  .dot.building { background: var(--amber); animation: pulse 1s infinite; }
+  .dot.success { background: var(--green); }
+  .dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .download {
+    display: none;
+    margin-top: 12px;
+    text-align: center;
+    padding: 12px 16px;
+    border-radius: 5px;
+    border: 1px solid var(--green);
+    color: var(--green);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .download:hover { background: var(--green); color: #0a0e14; }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <h1>AppBuilder</h1>
+  <div class="sub">Upload C# source, compile it to a Windows .exe.</div>
+
+  <label for="appName">Application name</label>
+  <input type="text" id="appName" placeholder="e.g. EpicBcaOverlay">
+
+  <label for="projectType">Project type <span style="text-transform:none;">(ignored if you upload a .csproj)</span></label>
+  <select id="projectType">
+    <option value="winforms">WinForms (windowed app)</option>
+    <option value="console">Console app</option>
+  </select>
+
+  <label>Source files</label>
+  <div class="dropzone" id="dropzone">
+    Click to browse, or drag files here<br>(.cs, .csproj, resources — folders supported)
+    <input type="file" id="fileInput" multiple webkitdirectory style="display:none;">
+  </div>
+  <div class="file-list" id="fileList"></div>
+
+  <button class="create" id="createBtn">Create Application</button>
+
+  <div class="status-line">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">Idle</span>
+  </div>
+
+  <a class="download" id="downloadLink" target="_blank" rel="noopener">Download EXE</a>
+</div>
+
+<script>
+  // Fill these in once your Worker is deployed
+  const WORKER_BASE = "https://appbuilder.YOUR-SUBDOMAIN.workers.dev";
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileListEl = document.getElementById('fileList');
+  const createBtn = document.getElementById('createBtn');
+  const appNameInput = document.getElementById('appName');
+  const projectTypeSelect = document.getElementById('projectType');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const downloadLink = document.getElementById('downloadLink');
+
+  let selectedFiles = []; // { name, file }
+  let pollTimer = null;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    addFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+  function addFiles(fileListObj) {
+    for (const file of fileListObj) {
+      const relPath = file.webkitRelativePath || file.name;
+      selectedFiles.push({ name: relPath, file });
+    }
+    renderFileList();
+  }
+
+  function renderFileList() {
+    fileListEl.innerHTML = '';
+    selectedFiles.forEach((f, i) => {
+      const row = document.createElement('div');
+      row.innerHTML = `<span>${f.name}</span><span class="remove" data-i="${i}">remove</span>`;
+      fileListEl.appendChild(row);
+    });
+    fileListEl.querySelectorAll('.remove').forEach(el => {
+      el.addEventListener('click', () => {
+        selectedFiles.splice(Number(el.dataset.i), 1);
+        renderFileList();
+      });
+    });
+  }
+
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    statusDot.className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function poll(buildId) {
+    try {
+      const res = await fetch(`${WORKER_BASE}/status?buildId=${encodeURIComponent(buildId)}`);
+      const data = await res.json();
+
+      if (data.status === 'completed') {
+        clearInterval(pollTimer);
+        createBtn.disabled = false;
+
+        if (data.conclusion === 'success' && data.downloadUrl) {
+          setStatus('Build complete', 'success');
+          downloadLink.href = data.downloadUrl;
+          downloadLink.style.display = 'block';
+        } else {
+          setStatus('Build failed — check GitHub Actions', 'error');
+        }
+      } else {
+        setStatus(data.status === 'in_progress' ? 'Building…' : 'Queued…', 'building');
+      }
+    } catch (e) {
+      clearInterval(pollTimer);
+      createBtn.disabled = false;
+      setStatus('Could not reach build service', 'error');
+    }
+  }
+
+  createBtn.addEventListener('click', async () => {
+    const appName = appNameInput.value.trim();
+    if (!appName) { setStatus('Enter an application name', 'error'); return; }
+    if (selectedFiles.length === 0) { setStatus('Add at least one file', 'error'); return; }
+
+    createBtn.disabled = true;
+    downloadLink.style.display = 'none';
+    setStatus('Uploading…', 'building');
+
+    try {
+      const buildId = crypto.randomUUID();
+      const files = await Promise.all(
+        selectedFiles.map(async (f) => ({
+          name: f.name,
+          contentBase64: await fileToBase64(f.file),
+        }))
+      );
+
+      const res = await fetch(`${WORKER_BASE}/build`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buildId,
+          appName,
+          projectType: projectTypeSelect.value,
+          files,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown error');
+
+      setStatus('Starting build…', 'building');
+      setTimeout(() => {
+        pollTimer = setInterval(() => poll(buildId), 5000);
+        poll(buildId);
+      }, 4000);
+    } catch (e) {
+      createBtn.disabled = false;
+      setStatus('Could not start build: ' + e.message, 'error');
+    }
+  });
+</script>
+
+</body>
+</html>

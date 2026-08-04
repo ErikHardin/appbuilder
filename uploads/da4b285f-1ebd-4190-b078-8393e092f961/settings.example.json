@@ -1,0 +1,26 @@
+{
+  "Prefix": "\\",
+  "Suffix": "\\",
+  "SendAfterScan": "None",
+  "CameraIndex": 0,
+  "ScanTimeoutSeconds": 15,
+  "PlaySuccessSound": true,
+  "ShowSuccessOverlay": true,
+  "EnableLogging": false,
+  "StartWithWindows": false,
+  "AutoRotate": true,
+  "TryHarder": true,
+  "TryInverted": true,
+  "EnabledFormats": [
+    "CODE_128",
+    "CODE_39",
+    "DATA_MATRIX",
+    "QR_CODE",
+    "PDF_417",
+    "AZTEC",
+    "UPC_A",
+    "UPC_E",
+    "EAN_13",
+    "EAN_8"
+  ]
+}
